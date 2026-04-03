@@ -5,40 +5,43 @@ import { Record } from './components/Record';
 import { Balance } from './components/Balance';
 import { Dreams } from './components/Dreams';
 import { Future } from './components/Future';
-import { initialData } from './data';
 import { AppState, Transaction } from './types';
+import { useAuth } from './AuthContext';
+import { Login, HouseholdSetup } from './components/Auth';
+import { Loader2 } from 'lucide-react';
 
 type Tab = 'home' | 'record' | 'balance' | 'dreams' | 'future';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<Tab>('home');
-  const [state, setState] = useState<AppState>(initialData);
+  const { user, householdId, state, loading, updateState, addTransaction } = useAuth();
 
-  const handleAddTransaction = (transaction: Transaction) => {
-    setState((prev) => {
-      const newState = { ...prev };
-      newState.transactions = [transaction, ...prev.transactions];
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-rose-50 flex items-center justify-center">
+        <Loader2 className="w-8 h-8 text-rose-500 animate-spin" />
+      </div>
+    );
+  }
 
-      // Update debt or dream progress if applicable
-      if (transaction.type === 'debt_payment') {
-        newState.debts = prev.debts.map(d => ({
-          ...d,
-          paidAmount: d.paidAmount + d.monthlyPayment
-        }));
-      } else if (transaction.type === 'dream_saving' && transaction.targetId) {
-        newState.dreams = prev.dreams.map(d =>
-          d.id === transaction.targetId
-            ? { ...d, currentAmount: d.currentAmount + transaction.amount }
-            : d
-        );
-      }
+  if (!user) {
+    return <Login />;
+  }
 
-      return newState;
-    });
+  if (!householdId || !state) {
+    return <HouseholdSetup />;
+  }
+
+  const handleAddTransaction = async (transaction: Transaction) => {
+    await addTransaction(transaction);
+  };
+
+  const handleUpdateState = async (newState: AppState) => {
+    await updateState(newState);
   };
 
   return (
-    <Layout activeTab={activeTab} onTabChange={setActiveTab} state={state} onUpdateState={setState}>
+    <Layout activeTab={activeTab} onTabChange={setActiveTab} state={state} onUpdateState={handleUpdateState}>
       {activeTab === 'home' && <Home state={state} />}
       {activeTab === 'record' && <Record state={state} onAddTransaction={handleAddTransaction} />}
       {activeTab === 'balance' && <Balance state={state} />}

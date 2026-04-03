@@ -1,0 +1,144 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "A user of the application.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "householdId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "householdId", "createdAt"]
+    },
+    "Household": {
+      "title": "Household",
+      "description": "A household containing family members, dreams, debts, and fixed expenses.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "members": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "family": {
+          "type": "array",
+          "items": { "$ref": "#/entities/FamilyMember" }
+        },
+        "dreams": {
+          "type": "array",
+          "items": { "$ref": "#/entities/Dream" }
+        },
+        "debts": {
+          "type": "array",
+          "items": { "$ref": "#/entities/Debt" }
+        },
+        "fixedExpenses": {
+          "type": "array",
+          "items": { "$ref": "#/entities/FixedExpense" }
+        },
+        "fixedIncomes": {
+          "type": "array",
+          "items": { "$ref": "#/entities/FixedIncome" }
+        },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "members", "family", "dreams", "debts", "fixedExpenses", "createdAt"]
+    },
+    "FamilyMember": {
+      "title": "FamilyMember",
+      "description": "A member of the family.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "birthDate": { "type": "string" },
+        "role": { "type": "string", "enum": ["parent", "child"] }
+      },
+      "required": ["id", "name", "birthDate", "role"]
+    },
+    "Dream": {
+      "title": "Dream",
+      "description": "A saving goal or dream.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "targetAmount": { "type": "number" },
+        "currentAmount": { "type": "number" },
+        "targetYear": { "type": "number" },
+        "term": { "type": "string", "enum": ["short", "long"] }
+      },
+      "required": ["id", "title", "targetAmount", "currentAmount", "targetYear", "term"]
+    },
+    "Debt": {
+      "title": "Debt",
+      "description": "A debt to be paid off.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "totalAmount": { "type": "number" },
+        "paidAmount": { "type": "number" },
+        "monthlyPayment": { "type": "number" }
+      },
+      "required": ["id", "title", "totalAmount", "paidAmount", "monthlyPayment"]
+    },
+    "FixedExpense": {
+      "title": "FixedExpense",
+      "description": "A recurring fixed expense.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "amount": { "type": "number" }
+      },
+      "required": ["id", "title", "amount"]
+    },
+    "FixedIncome": {
+      "title": "FixedIncome",
+      "description": "A recurring fixed income.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "amount": { "type": "number" }
+      },
+      "required": ["id", "title", "amount"]
+    },
+    "Transaction": {
+      "title": "Transaction",
+      "description": "A financial transaction (income or expense).",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "householdId": { "type": "string" },
+        "date": { "type": "string" },
+        "amount": { "type": "number" },
+        "type": { "type": "string", "enum": ["income", "expense_food", "expense_daily", "expense_other", "debt_payment", "dream_saving"] },
+        "memo": { "type": "string" },
+        "isHappy": { "type": "boolean" },
+        "targetId": { "type": "string" },
+        "category": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "householdId", "date", "amount", "type", "memo", "isHappy", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "#/entities/User",
+      "description": "Stores user profiles and their associated household ID."
+    },
+    "/households/{householdId}": {
+      "schema": "#/entities/Household",
+      "description": "Stores household data including family members, dreams, debts, and fixed expenses."
+    },
+    "/households/{householdId}/transactions/{transactionId}": {
+      "schema": "#/entities/Transaction",
+      "description": "Stores transactions for a specific household."
+    }
+  }
+}

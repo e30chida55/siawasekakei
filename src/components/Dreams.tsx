@@ -1,6 +1,7 @@
 import { AppState } from '../types';
 import { formatCurrency } from '../lib/utils';
 import { Star, Plus, Target, TrendingUp, Calendar } from 'lucide-react';
+import { addMonths, format } from 'date-fns';
 
 interface DreamsProps {
   state: AppState;
@@ -101,6 +102,10 @@ export function Dreams({ state }: DreamsProps) {
         <div className="space-y-4">
           {state.debts.map((debt) => {
             const progress = debt.totalAmount > 0 ? (debt.paidAmount / debt.totalAmount) * 100 : 0;
+            const remaining = debt.totalAmount - debt.paidAmount;
+            const remainingMonths = debt.monthlyPayment > 0 ? Math.ceil(remaining / debt.monthlyPayment) : 0;
+            const payoffDate = remaining > 0 && remainingMonths > 0 ? addMonths(new Date(), remainingMonths) : null;
+            
             return (
               <div key={debt.id} className="bg-white rounded-3xl p-5 shadow-sm border border-stone-100 relative overflow-hidden">
                 <div className="flex justify-between items-start mb-4">
@@ -108,12 +113,18 @@ export function Dreams({ state }: DreamsProps) {
                     <h3 className="text-lg font-bold text-stone-800 mb-1">{debt.title}</h3>
                     <div className="flex flex-col gap-1">
                       <p className="text-xs text-stone-500 font-medium">
-                        残り: <span className="text-stone-700">{formatCurrency(debt.totalAmount - debt.paidAmount)}</span>
+                        残り: <span className="text-stone-700">{formatCurrency(remaining)}</span>
                       </p>
                       <p className="text-xs text-stone-500 flex items-center gap-1">
                         <Calendar className="w-3 h-3" />
                         毎月の返済: {formatCurrency(debt.monthlyPayment)}
                       </p>
+                      {payoffDate && (
+                        <p className="text-xs text-emerald-600 font-bold flex items-center gap-1 mt-1">
+                          <Calendar className="w-3 h-3" />
+                          完済予定: {format(payoffDate, 'yyyy年M月')}
+                        </p>
+                      )}
                     </div>
                   </div>
                   <div className="w-12 h-12 bg-emerald-50 rounded-2xl flex items-center justify-center text-2xl border border-emerald-100 shadow-sm">

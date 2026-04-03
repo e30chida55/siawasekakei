@@ -1,0 +1,21 @@
+{
+  "name": "幸せ家族家計アプリ",
+  "short_name": "幸せ家計",
+  "description": "未来をワクワク描く、家族のための家計簿アプリ",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#fdfbf7",
+  "theme_color": "#f97316",
+  "icons": [
+    {
+      "src": "https://picsum.photos/seed/happy-family/192/192",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "https://picsum.photos/seed/happy-family/512/512",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

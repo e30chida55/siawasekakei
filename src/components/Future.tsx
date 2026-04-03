@@ -1,5 +1,5 @@
 import { AppState } from '../types';
-import { differenceInYears } from 'date-fns';
+import { differenceInYears, addMonths } from 'date-fns';
 import { Calendar, Star, TrendingUp, Heart } from 'lucide-react';
 import { cn } from '../lib/utils';
 
@@ -9,22 +9,20 @@ interface FutureProps {
 
 export function Future({ state }: FutureProps) {
   const currentYear = new Date().getFullYear();
-  const timelineYears = Array.from({ length: 10 }, (_, i) => currentYear + i);
+  const timelineYears = Array.from({ length: 20 }, (_, i) => currentYear + i);
 
   const calculateAgeInYear = (birthDate: string, targetYear: number) => {
     const birthYear = new Date(birthDate).getFullYear();
     return targetYear - birthYear;
   };
 
-  const totalDebt = state.debts.reduce((sum, d) => sum + d.totalAmount, 0);
-  const totalDebtPaid = state.debts.reduce((sum, d) => sum + d.paidAmount, 0);
-  const remainingDebt = totalDebt - totalDebtPaid;
-  
-  // Calculate based on actual monthly payments set in settings
-  const totalMonthlyPayment = state.debts.reduce((sum, d) => sum + d.monthlyPayment, 0);
-  const annualPayment = totalMonthlyPayment * 12;
-  const yearsToPayOff = annualPayment > 0 ? Math.max(1, Math.ceil(remainingDebt / annualPayment)) : 0;
-  const debtFreeYear = remainingDebt > 0 && annualPayment > 0 ? currentYear + yearsToPayOff : null;
+  // Calculate payoff year for each debt
+  const debtMilestones = state.debts.map(debt => {
+    const remaining = debt.totalAmount - debt.paidAmount;
+    const remainingMonths = debt.monthlyPayment > 0 ? Math.ceil(remaining / debt.monthlyPayment) : 0;
+    const payoffYear = remaining > 0 && remainingMonths > 0 ? addMonths(new Date(), remainingMonths).getFullYear() : null;
+    return { ...debt, payoffYear };
+  }).filter(d => d.payoffYear !== null);
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -37,7 +35,12 @@ export function Future({ state }: FutureProps) {
         {timelineYears.map((year, index) => {
           const isCurrentYear = year === currentYear;
           const dreamsInYear = state.dreams.filter((d) => d.targetYear === year);
-          const isDebtFreeYear = year === debtFreeYear;
+          const debtsPaidOffInYear = debtMilestones.filter((d) => d.payoffYear === year);
+
+          // Skip rendering years that have no events, except for the current year and the next 5 years
+          if (!isCurrentYear && index > 5 && dreamsInYear.length === 0 && debtsPaidOffInYear.length === 0) {
+            return null;
+          }
 
           return (
             <div key={year} className="relative pl-6">
@@ -64,7 +67,7 @@ export function Future({ state }: FutureProps) {
                     if (age < 0) return null; // Not born yet
                     return (
                       <div key={member.id} className="flex items-center gap-1.5">
-                        <span className="text-sm">{member.role === 'parent' ? (member.name === 'パパ' ? '👨' : '👩') : '👶'}</span>
+                        <span className="text-sm">{member.role === 'parent' ? (member.name === 'パパ' || member.name === '大夢' ? '👨' : '👩') : '👶'}</span>
                         <span className="text-xs font-bold text-stone-600">
                           {member.name} {age}歳
                         </span>
@@ -87,17 +90,17 @@ export function Future({ state }: FutureProps) {
                 ))}
 
                 {/* Debt Free Milestone */}
-                {isDebtFreeYear && (
-                  <div className="bg-gradient-to-r from-emerald-50 to-teal-50 rounded-2xl p-3 shadow-sm border border-emerald-100 flex items-start gap-3">
+                {debtsPaidOffInYear.map((debt) => (
+                  <div key={`debt-${debt.id}`} className="bg-gradient-to-r from-emerald-50 to-teal-50 rounded-2xl p-3 shadow-sm border border-emerald-100 flex items-start gap-3">
                     <div className="bg-emerald-100 p-2 rounded-xl">
                       <TrendingUp className="w-4 h-4 text-emerald-600" />
                     </div>
                     <div>
                       <p className="text-xs font-bold text-emerald-600 mb-0.5">マイルストーン</p>
-                      <p className="text-sm font-bold text-stone-800">借金完済予定！🎉</p>
+                      <p className="text-sm font-bold text-stone-800">「{debt.title}」完済予定！🎉</p>
                     </div>
                   </div>
-                )}
+                ))}
               </div>
             </div>
           );

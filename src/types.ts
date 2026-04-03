@@ -22,6 +22,18 @@ export type Debt = {
   monthlyPayment: number;
 };
 
+export type FixedExpense = {
+  id: string;
+  title: string;
+  amount: number;
+};
+
+export type FixedIncome = {
+  id: string;
+  title: string;
+  amount: number;
+};
+
 export type TransactionType = 'income' | 'expense_food' | 'expense_daily' | 'expense_other' | 'debt_payment' | 'dream_saving';
 
 export type Transaction = {
@@ -29,6 +41,7 @@ export type Transaction = {
   date: string;
   amount: number;
   type: TransactionType;
+  category?: string; // Added for income categories
   memo: string;
   isHappy: boolean; // For highlighting positive spending
   targetId?: string; // For linking to specific dream or debt
@@ -38,6 +51,7 @@ export type AppState = {
   family: FamilyMember[];
   dreams: Dream[];
   debts: Debt[];
+  fixedExpenses: FixedExpense[];
   transactions: Transaction[];
 };
 

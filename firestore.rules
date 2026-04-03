@@ -1,0 +1,159 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: {userId}
+    // Fields:
+    //   - uid: string (required) - User's Firebase Auth UID
+    //   - email: string (required) - User's email address
+    //   - householdId: string (required) - ID of the household they belong to
+    //   - createdAt: string (required) - ISO 8601 date string
+    //
+    // Collection: households
+    // Document ID: {householdId}
+    // Fields:
+    //   - id: string (required) - Household ID
+    //   - members: list (required) - Array of UIDs of members in this household
+    //   - family: list (required) - Array of family member objects
+    //   - dreams: list (required) - Array of dream objects
+    //   - debts: list (required) - Array of debt objects
+    //   - fixedExpenses: list (required) - Array of fixed expense objects
+    //   - fixedIncomes: list (optional) - Array of fixed income objects
+    //   - createdAt: string (required) - ISO 8601 date string
+    //
+    // Collection: households/{householdId}/transactions
+    // Document ID: {transactionId}
+    // Fields:
+    //   - id: string (required) - Transaction ID
+    //   - householdId: string (required) - Household ID
+    //   - date: string (required) - YYYY-MM-DD
+    //   - amount: number (required) - Amount of transaction
+    //   - type: string (required) - Type of transaction
+    //   - memo: string (required) - Memo
+    //   - isHappy: boolean (required) - Is happy spending
+    //   - targetId: string (optional) - Target ID for debt or dream
+    //   - createdAt: string (required) - ISO 8601 date string
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isHouseholdMember(householdId) {
+      return isAuthenticated() && request.auth.uid in get(/databases/$(database)/documents/households/$(householdId)).data.members;
+    }
+
+    function isValidDateString(dateStr) {
+      return dateStr is string && dateStr.matches("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}.*Z?$");
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUser() {
+      let data = request.resource.data;
+      return hasOnlyAllowedFields(['uid', 'email', 'householdId', 'createdAt']) &&
+             data.uid is string && data.uid == request.auth.uid &&
+             isValidEmail(data.email) &&
+             data.householdId is string && data.householdId.size() >= 0 && data.householdId.size() < 100 &&
+             isValidDateString(data.createdAt);
+    }
+
+    function isValidHousehold() {
+      let data = request.resource.data;
+      return hasOnlyAllowedFields(['id', 'members', 'family', 'dreams', 'debts', 'fixedExpenses', 'fixedIncomes', 'createdAt']) &&
+             data.id is string && data.id.size() > 0 && data.id.size() < 100 &&
+             data.members is list && data.members.size() > 0 && data.members.size() <= 10 &&
+             data.family is list && data.family.size() <= 20 &&
+             data.dreams is list && data.dreams.size() <= 50 &&
+             data.debts is list && data.debts.size() <= 50 &&
+             data.fixedExpenses is list && data.fixedExpenses.size() <= 50 &&
+             (!('fixedIncomes' in data) || (data.fixedIncomes is list && data.fixedIncomes.size() <= 50)) &&
+             isValidDateString(data.createdAt);
+    }
+
+    function isValidTransaction() {
+      let data = request.resource.data;
+      let allowedTypes = ['income', 'expense_food', 'expense_daily', 'expense_other', 'debt_payment', 'dream_saving'];
+      
+      let baseValid = data.keys().hasAll(['id', 'householdId', 'date', 'amount', 'type', 'memo', 'isHappy', 'createdAt']) &&
+                      data.id is string && data.id.size() > 0 && data.id.size() < 100 &&
+                      data.householdId is string && data.householdId.size() > 0 && data.householdId.size() < 100 &&
+                      data.date is string && data.date.size() == 10 &&
+                      data.amount is number && data.amount >= 0 &&
+                      data.type in allowedTypes &&
+                      data.memo is string && data.memo.size() <= 500 &&
+                      data.isHappy is bool &&
+                      isValidDateString(data.createdAt);
+                      
+      let targetIdValid = !('targetId' in data) || (data.targetId is string && data.targetId.size() <= 100);
+      let categoryValid = !('category' in data) || (data.category is string && data.category.size() <= 100);
+      let updatedAtValid = !('updatedAt' in data) || isValidDateString(data.updatedAt);
+      
+      return baseValid && targetIdValid && categoryValid && updatedAtValid && hasOnlyAllowedFields(['id', 'householdId', 'date', 'amount', 'type', 'memo', 'isHappy', 'targetId', 'category', 'createdAt', 'updatedAt']);
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidUser();
+      allow update: if isOwner(userId) && isValidUser() && request.resource.data.uid == resource.data.uid && request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if false; // Users shouldn't be deleted directly from client
+    }
+
+    match /households/{householdId} {
+      // Allow get so users can verify the household exists before joining
+      allow get: if isAuthenticated();
+      // Allow list if the user is in the members list
+      allow list: if isAuthenticated() && request.auth.uid in resource.data.members;
+      
+      // Allow create if the user is adding themselves to the members list
+      allow create: if isAuthenticated() && isValidHousehold() && request.auth.uid in request.resource.data.members;
+      
+      // Allow update if the user is already a member, or if they are adding themselves (joining)
+      allow update: if isAuthenticated() && isValidHousehold() && 
+                    (request.auth.uid in resource.data.members || request.auth.uid in request.resource.data.members) &&
+                    request.resource.data.id == resource.data.id &&
+                    request.resource.data.createdAt == resource.data.createdAt;
+                    
+      allow delete: if false;
+      
+      match /transactions/{transactionId} {
+        // Allow read/write if the user is a member of the parent household
+        allow read: if isHouseholdMember(householdId);
+        allow create: if isHouseholdMember(householdId) && isValidTransaction() && request.resource.data.householdId == householdId;
+        allow update: if isHouseholdMember(householdId) && isValidTransaction() && 
+                      (!('id' in resource.data) || request.resource.data.id == resource.data.id) && 
+                      (!('householdId' in resource.data) || request.resource.data.householdId == resource.data.householdId) &&
+                      (!('createdAt' in resource.data) || request.resource.data.createdAt == resource.data.createdAt);
+        allow delete: if isHouseholdMember(householdId);
+      }
+    }
+  }
+}

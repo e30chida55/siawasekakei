@@ -1,64 +1,92 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AppState, Transaction, TransactionType } from '../types';
 import { cn } from '../lib/utils';
 import { Heart, Star, TrendingUp, Wallet, CheckCircle2, ShoppingCart, Utensils } from 'lucide-react';
 
 interface RecordProps {
   state: AppState;
-  onAddTransaction: (t: Transaction) => void;
+  onAddTransaction: (t: Transaction) => Promise<void>;
 }
 
 export function Record({ state, onAddTransaction }: RecordProps) {
   const [amount, setAmount] = useState('');
   const [memo, setMemo] = useState('');
   const [type, setType] = useState<TransactionType>('expense_food');
+  const [category, setCategory] = useState<string>('給料');
   const [isHappy, setIsHappy] = useState(true);
   const [targetId, setTargetId] = useState<string>('');
   const [isSubmitted, setIsSubmitted] = useState(false);
 
-  // Auto-select first dream if available
+  // Auto-select first dream or debt if available
   useEffect(() => {
     if (type === 'dream_saving' && state.dreams.length > 0 && !targetId) {
       setTargetId(state.dreams[0].id);
+    } else if (type === 'debt_payment' && state.debts.length > 0 && !targetId) {
+      const firstDebt = state.debts[0];
+      setTargetId(firstDebt.id);
+      setAmount(firstDebt.monthlyPayment.toString());
+      setMemo(`${firstDebt.title}の返済`);
     }
-  }, [type, state.dreams, targetId]);
+  }, [type, state.dreams, state.debts, targetId]);
 
   const handleTypeChange = (newType: TransactionType) => {
     setType(newType);
-    if (newType === 'debt_payment') {
-      const totalMonthlyPayment = state.debts.reduce((sum, d) => sum + d.monthlyPayment, 0);
-      setAmount(totalMonthlyPayment.toString());
-      setMemo('毎月の借金返済');
+    setTargetId(''); // Reset target ID when type changes
+    if (newType === 'debt_payment' && state.debts.length > 0) {
+      const firstDebt = state.debts[0];
+      setTargetId(firstDebt.id);
+      setAmount(firstDebt.monthlyPayment.toString());
+      setMemo(`${firstDebt.title}の返済`);
     } else {
       setAmount('');
       setMemo('');
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleDebtChange = (debtId: string) => {
+    setTargetId(debtId);
+    const selectedDebt = state.debts.find(d => d.id === debtId);
+    if (selectedDebt) {
+      setAmount(selectedDebt.monthlyPayment.toString());
+      setMemo(`${selectedDebt.title}の返済`);
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!amount || isNaN(Number(amount))) return;
 
-    const newTransaction: Transaction = {
+    const newTransaction: Partial<Transaction> & { id: string, date: string, amount: number, type: TransactionType, memo: string, isHappy: boolean } = {
       id: Date.now().toString(),
       date: new Date().toISOString().split('T')[0],
       amount: Number(amount),
       type,
       memo,
       isHappy,
-      targetId: type === 'dream_saving' ? targetId : undefined,
     };
 
-    onAddTransaction(newTransaction);
-    setIsSubmitted(true);
-    setTimeout(() => {
-      setIsSubmitted(false);
-      setAmount('');
-      setMemo('');
-      setType('expense_food');
-      setIsHappy(true);
-      setTargetId('');
-    }, 2000);
+    if (type === 'income') {
+      newTransaction.category = category;
+    }
+
+    if (type === 'dream_saving' || type === 'debt_payment') {
+      newTransaction.targetId = targetId;
+    }
+
+    try {
+      await onAddTransaction(newTransaction as Transaction);
+      setIsSubmitted(true);
+      setTimeout(() => {
+        setIsSubmitted(false);
+        setAmount('');
+        setMemo('');
+        setType('expense_food');
+        setIsHappy(true);
+        setTargetId('');
+      }, 2000);
+    } catch (error) {
+      // Error is handled in AuthContext
+    }
   };
 
   if (isSubmitted) {
@@ -183,6 +211,41 @@ export function Record({ state, onAddTransaction }: RecordProps) {
             </div>
           )}
 
+          {/* Target Debt Selection */}
+          {type === 'debt_payment' && state.debts.length > 0 && (
+            <div className="animate-in fade-in slide-in-from-top-2 duration-300">
+              <label className="block text-sm font-bold text-stone-500 mb-2">どの借金の返済？</label>
+              <select
+                value={targetId}
+                onChange={(e) => handleDebtChange(e.target.value)}
+                className="w-full bg-stone-50 border-none rounded-2xl py-4 px-4 text-base font-bold text-stone-800 focus:ring-2 focus:ring-emerald-400 outline-none transition-all"
+                required
+              >
+                {state.debts.map(debt => (
+                  <option key={debt.id} value={debt.id}>{debt.title}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Income Category Selection */}
+          {type === 'income' && (
+            <div className="animate-in fade-in slide-in-from-top-2 duration-300">
+              <label className="block text-sm font-bold text-stone-500 mb-2">収入の種類</label>
+              <select
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                className="w-full bg-stone-50 border-none rounded-2xl py-4 px-4 text-base font-bold text-stone-800 focus:ring-2 focus:ring-blue-400 outline-none transition-all"
+                required
+              >
+                <option value="給料">給料</option>
+                <option value="ボーナス">ボーナス</option>
+                <option value="副収入">副収入</option>
+                <option value="その他">その他</option>
+              </select>
+            </div>
+          )}
+
           {/* Amount Input */}
           <div>
             <label className="block text-sm font-bold text-stone-500 mb-2">金額</label>
@@ -193,29 +256,26 @@ export function Record({ state, onAddTransaction }: RecordProps) {
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
                 placeholder="0"
-                readOnly={isDebt}
-                className={cn(
-                  "w-full border-none rounded-2xl py-4 pl-10 pr-4 text-2xl font-bold focus:ring-2 focus:ring-orange-400 outline-none transition-all",
-                  isDebt ? "bg-stone-100 text-stone-500" : "bg-stone-50 text-stone-800"
-                )}
+                className="w-full bg-stone-50 border-none rounded-2xl py-4 pl-10 pr-4 text-2xl font-bold text-stone-800 focus:ring-2 focus:ring-orange-400 outline-none transition-all"
                 required
               />
             </div>
             {isDebt && (
-              <p className="text-xs text-stone-400 mt-2 ml-1">※設定された毎月の返済額が自動で入力されます</p>
+              <p className="text-xs text-stone-400 mt-2 ml-1">※設定された毎月の返済額が自動で入力されますが、変更も可能です</p>
             )}
           </div>
 
           {/* Memo Input */}
           <div>
-            <label className="block text-sm font-bold text-stone-500 mb-2">メモ（何に使った？）</label>
+            <label className="block text-sm font-bold text-stone-500 mb-2">
+              {type === 'income' ? 'メモ（何の収入？）' : 'メモ（何に使った？）'}
+            </label>
             <input
               type="text"
               value={memo}
               onChange={(e) => setMemo(e.target.value)}
-              placeholder="例：家族で美味しいディナー"
+              placeholder={type === 'income' ? '例：臨時ボーナス、フリマ売上' : '例：家族で美味しいディナー'}
               className="w-full bg-stone-50 border-none rounded-2xl py-4 px-4 text-base text-stone-800 focus:ring-2 focus:ring-orange-400 outline-none transition-all"
-              required
             />
           </div>
 
